@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
+import {
+  User,
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+} from 'firebase/auth';
 import { AdherenceCheckInView } from './components/AdherenceCheckInView';
 import { ComplianceBanner } from './components/ComplianceBanner';
 import { Header } from './components/Header';
+import { LoginScreen } from './components/LoginScreen';
 import { MedicineModal } from './components/MedicineModal';
 import { PilotAssumptionsView } from './components/PilotAssumptionsView';
 import { RefillApprovalModal } from './components/RefillApprovalModal';
@@ -14,6 +21,12 @@ import {
   INITIAL_MEDICINES,
   INITIAL_REFILL_ORDERS,
 } from './data/sampleData';
+import {
+  auth,
+  googleProvider,
+  isFirebaseConfigured,
+  missingFirebaseEnvVars,
+} from './lib/firebase';
 import {
   AdherenceCheckIn,
   AppView,
@@ -56,7 +69,33 @@ function loadInitialState(): PersistedState {
   };
 }
 
+function formatFirebaseAuthError(error: unknown): string {
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code)
+      : '';
+
+  switch (code) {
+    case 'auth/popup-closed-by-user':
+      return 'Sign-in was cancelled before completion. Click Continue with Google to try again.';
+    case 'auth/popup-blocked':
+      return 'Pop-up was blocked by your browser. Please allow pop-ups for this site and try again.';
+    case 'auth/unauthorized-domain':
+      return 'This domain is not authorized in your Firebase project. Add this URL under Firebase Console → Authentication → Settings → Authorized domains.';
+    case 'auth/network-request-failed':
+      return 'Network error while reaching Google Sign-In. Check your connection and retry.';
+    default:
+      return 'Unable to complete Google Sign-In. Verify your Firebase Auth settings and try again.';
+  }
+}
+
 export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(isFirebaseConfigured);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
   const [initialState] = useState<PersistedState>(() => loadInitialState());
   const [activeView, setActiveView] = useState<AppView>('tracker');
   const [selectedMemberId, setSelectedMemberId] = useState<string>('all');
@@ -73,6 +112,20 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!auth || !isFirebaseConfigured) {
+      setAuthLoading(false);
+      return;
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      setAuthLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
     try {
       const payload: PersistedState = { medicines, orders, checkIns };
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -86,6 +139,36 @@ export default function App() {
     window.setTimeout(() => {
       setToastMessage((curr) => (curr === msg ? null : curr));
     }, 3600);
+  };
+
+  const handleSignInWithGoogle = async () => {
+    if (!auth || !googleProvider) return;
+    setAuthError(null);
+    setIsSigningIn(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      setAuthError(formatFirebaseAuthError(error));
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    if (!auth) return;
+    setIsSigningOut(true);
+    try {
+      await signOut(auth);
+      setIsMedModalOpen(false);
+      setEditingMedicine(null);
+      setReminderMedicine(null);
+      setApprovalMedicine(null);
+      setActiveView('tracker');
+    } catch {
+      showToast('Could not sign out cleanly. Please try again.');
+    } finally {
+      setIsSigningOut(false);
+    }
   };
 
   const dueCount = useMemo(
@@ -164,6 +247,29 @@ export default function App() {
   const getMemberById = (memberId: string | undefined) =>
     INITIAL_FAMILY_MEMBERS.find((m) => m.id === memberId) || null;
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F6F8F7] text-slate-700 px-4">
+        <div className="bg-white border border-slate-200 rounded-2xl px-6 py-5 text-center space-y-2 shadow-xs">
+          <p className="font-display text-lg font-bold text-slate-900">DawaiDost</p>
+          <p className="text-xs text-slate-500">Verifying your sign-in session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isFirebaseConfigured || !user) {
+    return (
+      <LoginScreen
+        isConfigured={isFirebaseConfigured}
+        missingEnvVars={missingFirebaseEnvVars}
+        isSigningIn={isSigningIn}
+        authError={authError}
+        onSignInWithGoogle={handleSignInWithGoogle}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-[#F6F8F7] text-slate-900">
       <Header
@@ -172,6 +278,9 @@ export default function App() {
         onAddMedicine={handleOpenAddMedicine}
         dueCount={dueCount}
         orderCount={orders.length}
+        user={user}
+        onSignOut={handleSignOut}
+        isSigningOut={isSigningOut}
       />
 
       <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">

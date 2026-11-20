@@ -2,5 +2,7 @@
   "name": "DawaiDost",
   "description": "Chronic-medicine refill and adherence coordination service for families and RWAs in Noida and Greater Noida through licensed partner pharmacies.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
