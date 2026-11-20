@@ -3,9 +3,11 @@ import {
   CheckCircle2,
   FileWarning,
   ShieldCheck,
+  Smartphone,
   Truck,
   X,
 } from 'lucide-react';
+import { initiateUpiFirstRazorpayPayment } from '../lib/razorpay';
 import { FamilyMember, MedicineEntry, RefillOrder } from '../types';
 
 interface RefillApprovalModalProps {
@@ -14,6 +16,8 @@ interface RefillApprovalModalProps {
   primaryMedicine: MedicineEntry | null;
   allMedicines: MedicineEntry[];
   member: FamilyMember | null;
+  userEmail?: string;
+  userName?: string;
   onConfirmOrder: (order: RefillOrder, refilledMedicineIds: string[]) => void;
   onOpenEditRx: (medicine: MedicineEntry) => void;
 }
@@ -24,6 +28,8 @@ export const RefillApprovalModal: React.FC<RefillApprovalModalProps> = ({
   primaryMedicine,
   allMedicines,
   member,
+  userEmail,
+  userName,
   onConfirmOrder,
   onOpenEditRx,
 }) => {
@@ -32,6 +38,8 @@ export const RefillApprovalModal: React.FC<RefillApprovalModalProps> = ({
     'Today, 6:00 PM – 8:00 PM (RWA Gate / Doorstep)'
   );
   const [confirmedOrder, setConfirmedOrder] = useState<RefillOrder | null>(null);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const eligibleDueBundle = useMemo(() => {
     if (!primaryMedicine || !member) return [];
@@ -56,45 +64,82 @@ export const RefillApprovalModal: React.FC<RefillApprovalModalProps> = ({
 
   const handleClose = () => {
     setConfirmedOrder(null);
+    setPaymentError(null);
+    setIsProcessingPayment(false);
     onClose();
   };
 
-  const handleConfirm = () => {
-    if (selectedItems.length === 0) return;
+  const handlePayAndConfirm = async () => {
+    if (selectedItems.length === 0 || isProcessingPayment) return;
 
-    const order: RefillOrder = {
-      id: `ord-${Date.now()}`,
-      orderNumber: `DD-2026-${Math.floor(1030 + Math.random() * 890)}`,
-      createdAt: '20 Nov 2026 · Just now',
-      memberId: member.id,
-      memberName: member.name,
-      memberRelation: member.relation,
-      deliveryAddress: member.societyAddress,
-      items: selectedItems.map((item) => ({
-        medicineId: item.id,
-        medicineName: item.medicineName,
-        prescribedBrand: item.prescribedBrand,
-        packSummary: `${item.stripSize} × ${item.packCount}`,
-        batchNumber: item.batchNumber,
-        expiryDate: item.expiryDate,
-        rxNumber: item.rxNumber,
-        amount: item.estimatedOrderValue,
-      })),
-      totalAmount,
-      membershipApplied: true,
-      partnerPharmacy: primaryMedicine.partnerPharmacy,
-      partnerLicenseNo: primaryMedicine.partnerLicenseNo,
-      pharmacistName: primaryMedicine.pharmacistName,
-      pharmacistRegNo: primaryMedicine.pharmacistRegNo,
-      status: 'Pharmacist Verified · Scheduled',
-      deliverySlot,
-    };
+    setPaymentError(null);
+    setIsProcessingPayment(true);
 
-    onConfirmOrder(
-      order,
-      selectedItems.map((i) => i.id)
-    );
-    setConfirmedOrder(order);
+    try {
+      const orderNumber = `DD-2026-${Math.floor(1030 + Math.random() * 890)}`;
+      const paymentResult = await initiateUpiFirstRazorpayPayment({
+        amountInRupees: totalAmount,
+        purpose: 'refill',
+        description: `Pharmacist-Verified Refill (${selectedItems.length} item${
+          selectedItems.length > 1 ? 's' : ''
+        }) · ${member.name}`,
+        receipt: orderNumber,
+        prefill: {
+          name: userName || member.name,
+          email: userEmail || '',
+        },
+        notes: {
+          member_name: member.name,
+          order_number: orderNumber,
+          partner_pharmacy: primaryMedicine.partnerPharmacy,
+        },
+      });
+
+      const order: RefillOrder = {
+        id: `ord-${Date.now()}`,
+        orderNumber,
+        createdAt: '20 Nov 2026 · Just now',
+        memberId: member.id,
+        memberName: member.name,
+        memberRelation: member.relation,
+        deliveryAddress: member.societyAddress,
+        items: selectedItems.map((item) => ({
+          medicineId: item.id,
+          medicineName: item.medicineName,
+          prescribedBrand: item.prescribedBrand,
+          packSummary: `${item.stripSize} × ${item.packCount}`,
+          batchNumber: item.batchNumber,
+          expiryDate: item.expiryDate,
+          rxNumber: item.rxNumber,
+          amount: item.estimatedOrderValue,
+        })),
+        totalAmount,
+        membershipApplied: true,
+        partnerPharmacy: primaryMedicine.partnerPharmacy,
+        partnerLicenseNo: primaryMedicine.partnerLicenseNo,
+        pharmacistName: primaryMedicine.pharmacistName,
+        pharmacistRegNo: primaryMedicine.pharmacistRegNo,
+        status: 'Pharmacist Verified · Scheduled',
+        deliverySlot,
+        paymentVerified: paymentResult.verified,
+        razorpayPaymentId: paymentResult.razorpay_payment_id,
+        razorpayOrderId: paymentResult.razorpay_order_id,
+      };
+
+      onConfirmOrder(
+        order,
+        selectedItems.map((i) => i.id)
+      );
+      setConfirmedOrder(order);
+    } catch (error) {
+      setPaymentError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to complete UPI / Razorpay payment. Please try again.'
+      );
+    } finally {
+      setIsProcessingPayment(false);
+    }
   };
 
   return (
@@ -111,7 +156,7 @@ export const RefillApprovalModal: React.FC<RefillApprovalModalProps> = ({
           <div>
             <h2 id="approval-modal-title" className="font-display text-lg font-semibold text-slate-900">
               {confirmedOrder
-                ? 'Pharmacist-Verified Refill Approved'
+                ? 'Pharmacist-Verified Refill Paid & Scheduled'
                 : 'Approve Pharmacist-Verified Refill'}
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -131,18 +176,35 @@ export const RefillApprovalModal: React.FC<RefillApprovalModalProps> = ({
         <div className="overflow-y-auto px-5 py-4 space-y-4">
           {confirmedOrder ? (
             <div className="space-y-4">
-              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" aria-hidden="true" />
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold text-emerald-950">
-                    Order <span className="font-mono">{confirmedOrder.orderNumber}</span> Confirmed
-                  </p>
-                  <p className="text-xs text-emerald-800 leading-relaxed">
-                    Routed to {confirmedOrder.partnerPharmacy}. Verified by{' '}
-                    {confirmedOrder.pharmacistName} ({confirmedOrder.pharmacistRegNo}) with batch
-                    and expiry recorded. Medicine supply timers have been updated (+30 days).
-                  </p>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 space-y-2.5">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2
+                    className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5"
+                    aria-hidden="true"
+                  />
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-emerald-950">
+                      Order <span className="font-mono">{confirmedOrder.orderNumber}</span> Confirmed
+                    </p>
+                    <p className="text-xs text-emerald-800 leading-relaxed">
+                      Routed to {confirmedOrder.partnerPharmacy}. Verified by{' '}
+                      {confirmedOrder.pharmacistName} ({confirmedOrder.pharmacistRegNo}) with batch
+                      and expiry recorded. Medicine supply timers have been updated (+30 days).
+                    </p>
+                  </div>
                 </div>
+
+                {confirmedOrder.paymentVerified && confirmedOrder.razorpayPaymentId && (
+                  <div className="pt-2.5 border-t border-emerald-200/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-900">
+                      <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" aria-hidden="true" />
+                      <span>Payment Verified via UPI / Razorpay</span>
+                    </span>
+                    <span className="font-mono text-emerald-950">
+                      {confirmedOrder.razorpayPaymentId}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="border border-slate-200 rounded-2xl divide-y divide-slate-100">
@@ -157,7 +219,7 @@ export const RefillApprovalModal: React.FC<RefillApprovalModalProps> = ({
                   <span className="font-medium text-slate-900">{confirmedOrder.deliverySlot}</span>
                 </div>
                 <div className="p-3.5 flex items-center justify-between text-xs">
-                  <span className="text-slate-500">Order Total</span>
+                  <span className="text-slate-500">Paid Total</span>
                   <span className="font-mono font-semibold text-sm text-slate-900 tabular-nums">
                     ₹{confirmedOrder.totalAmount.toLocaleString('en-IN')}
                   </span>
@@ -265,7 +327,9 @@ export const RefillApprovalModal: React.FC<RefillApprovalModalProps> = ({
                         Rx <span className="font-mono text-teal-800">{item.rxNumber}</span>
                       </span>
                       <span aria-hidden="true">·</span>
-                      <span className="text-emerald-700 font-medium">Exact brand (no substitution)</span>
+                      <span className="text-emerald-700 font-medium">
+                        Exact brand (no substitution)
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -339,7 +403,7 @@ export const RefillApprovalModal: React.FC<RefillApprovalModalProps> = ({
                     <span className="font-medium text-emerald-700">Included</span>
                   </div>
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-sm font-semibold text-slate-900">
-                    <span>Total Payable on Verified Delivery</span>
+                    <span>Total Payable via UPI / Razorpay</span>
                     <span className="font-mono tabular-nums text-base">
                       ₹{totalAmount.toLocaleString('en-IN')}
                     </span>
@@ -347,21 +411,50 @@ export const RefillApprovalModal: React.FC<RefillApprovalModalProps> = ({
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:flex-1"
+              {paymentError && (
+                <div
+                  role="alert"
+                  className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800 leading-relaxed"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirm}
-                  className="min-h-[44px] px-5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 active:scale-[0.99] text-white text-sm font-medium sm:flex-[2] transition-all"
-                >
-                  Confirm Pharmacist-Verified Refill (₹{totalAmount.toLocaleString('en-IN')})
-                </button>
+                  {paymentError}
+                </div>
+              )}
+
+              {/* UPI-First Payment Guidance + Action Buttons */}
+              <div className="space-y-2.5 pt-1">
+                <div className="flex items-start gap-2 text-xs text-slate-600 bg-slate-50 border border-slate-200/80 rounded-xl p-3">
+                  <Smartphone className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" aria-hidden="true" />
+                  <div className="space-y-0.5">
+                    <p className="font-medium text-slate-800">
+                      Pay via GPay, Paytm, PhonePe, UPI QR, or Card (powered by Razorpay)
+                    </p>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      On mobile browsers, UPI opens your installed UPI app directly; on desktop,
+                      Razorpay displays a scannable UPI QR code.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleClose}
+                    disabled={isProcessingPayment}
+                    className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 sm:flex-1"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePayAndConfirm}
+                    disabled={isProcessingPayment}
+                    className="min-h-[44px] px-5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-60 active:scale-[0.99] text-white text-sm font-medium sm:flex-[2] transition-all"
+                  >
+                    {isProcessingPayment
+                      ? 'Opening Razorpay UPI Checkout...'
+                      : `Pay & Confirm Refill Order (₹${totalAmount.toLocaleString('en-IN')})`}
+                  </button>
+                </div>
               </div>
             </>
           )}

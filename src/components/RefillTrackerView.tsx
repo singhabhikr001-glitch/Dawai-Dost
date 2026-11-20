@@ -10,8 +10,9 @@ import {
   MapPin,
   Search,
   ShieldCheck,
+  Smartphone,
 } from 'lucide-react';
-import { FamilyMember, MedicineEntry } from '../types';
+import { FamilyMember, MedicineEntry, MembershipPaymentState } from '../types';
 
 interface RefillTrackerViewProps {
   familyMembers: FamilyMember[];
@@ -22,6 +23,10 @@ interface RefillTrackerViewProps {
   onPreviewReminder: (medicine: MedicineEntry) => void;
   onApproveRefill: (medicine: MedicineEntry) => void;
   onSimulateDaysAdvance: () => void;
+  membershipPayment: MembershipPaymentState;
+  isPayingMembership: boolean;
+  membershipPaymentError: string | null;
+  onPayMembership: () => void;
 }
 
 type StatusFilter = 'all' | 'due' | 'missing_rx';
@@ -35,6 +40,10 @@ export const RefillTrackerView: React.FC<RefillTrackerViewProps> = ({
   onPreviewReminder,
   onApproveRefill,
   onSimulateDaysAdvance,
+  membershipPayment,
+  isPayingMembership,
+  membershipPaymentError,
+  onPayMembership,
 }) => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -153,6 +162,73 @@ export const RefillTrackerView: React.FC<RefillTrackerViewProps> = ({
           <FastForward className="w-3.5 h-3.5 text-teal-700" aria-hidden="true" />
           <span>Simulate −2 Days Supply</span>
         </button>
+      </section>
+
+      {/* ₹99/month Family Membership UPI / Razorpay Card */}
+      <section
+        aria-label="DawaiDost Family Membership Payment"
+        className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5"
+      >
+        {membershipPayment.verified ? (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <CheckCircle2
+                className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5"
+                aria-hidden="true"
+              />
+              <div className="space-y-0.5">
+                <p className="text-sm font-semibold text-emerald-950">
+                  Payment Verified via UPI / Razorpay · ₹99/mo Membership Active
+                </p>
+                <p className="text-xs text-slate-600">
+                  Covers family prescription vault, 5–7 day refill alerts &amp; partner pharmacy
+                  coordination · Verified {membershipPayment.verifiedAt}
+                </p>
+              </div>
+            </div>
+            {membershipPayment.razorpayPaymentId && (
+              <span className="font-mono text-xs text-emerald-900 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl shrink-0 self-start sm:self-auto">
+                {membershipPayment.razorpayPaymentId}
+              </span>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="space-y-1.5 max-w-2xl">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
+                <span className="font-semibold text-slate-900 text-sm">
+                  DawaiDost Family Plan — ₹99/month
+                </span>
+                <span aria-hidden="true">·</span>
+                <span>Unlimited family members &amp; RWA refill coordination</span>
+              </div>
+              <div className="flex items-start gap-2 text-xs text-slate-600">
+                <Smartphone className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" aria-hidden="true" />
+                <span>
+                  <strong className="text-slate-800">
+                    Pay via GPay, Paytm, PhonePe, UPI QR, or Card (powered by Razorpay)
+                  </strong>{' '}
+                  — On mobile browsers, UPI opens your installed UPI app directly while desktop
+                  displays a QR code to scan.
+                </span>
+              </div>
+              {membershipPaymentError && (
+                <p role="alert" className="text-xs text-red-700 pt-1">
+                  {membershipPaymentError}
+                </p>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={onPayMembership}
+              disabled={isPayingMembership}
+              className="self-start lg:self-auto min-h-[44px] px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-60 active:scale-[0.99] text-white text-sm font-medium whitespace-nowrap shrink-0 transition-all"
+            >
+              {isPayingMembership ? 'Opening UPI Checkout...' : 'Pay ₹99/mo Membership'}
+            </button>
+          </div>
+        )}
       </section>
 
       {/* Family Member Switcher (Segmented Control) */}

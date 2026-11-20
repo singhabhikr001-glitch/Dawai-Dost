@@ -27,19 +27,27 @@ import {
   isFirebaseConfigured,
   missingFirebaseEnvVars,
 } from './lib/firebase';
+import { initiateUpiFirstRazorpayPayment } from './lib/razorpay';
 import {
   AdherenceCheckIn,
   AppView,
   MedicineEntry,
+  MembershipPaymentState,
   RefillOrder,
 } from './types';
 
 const STORAGE_KEY = 'dawaidost_prototype_state_v1';
 
+const DEFAULT_MEMBERSHIP_STATE: MembershipPaymentState = {
+  verified: false,
+  amount: 99,
+};
+
 interface PersistedState {
   medicines: MedicineEntry[];
   orders: RefillOrder[];
   checkIns: AdherenceCheckIn[];
+  membershipPayment: MembershipPaymentState;
 }
 
 function loadInitialState(): PersistedState {
@@ -56,6 +64,7 @@ function loadInitialState(): PersistedState {
           medicines: parsed.medicines,
           orders: parsed.orders,
           checkIns: parsed.checkIns,
+          membershipPayment: parsed.membershipPayment || DEFAULT_MEMBERSHIP_STATE,
         };
       }
     }
@@ -66,6 +75,7 @@ function loadInitialState(): PersistedState {
     medicines: INITIAL_MEDICINES,
     orders: INITIAL_REFILL_ORDERS,
     checkIns: INITIAL_CHECKINS,
+    membershipPayment: DEFAULT_MEMBERSHIP_STATE,
   };
 }
 
@@ -106,6 +116,11 @@ export default function App() {
   const [medicines, setMedicines] = useState<MedicineEntry[]>(initialState.medicines);
   const [orders, setOrders] = useState<RefillOrder[]>(initialState.orders);
   const [checkIns, setCheckIns] = useState<AdherenceCheckIn[]>(initialState.checkIns);
+  const [membershipPayment, setMembershipPayment] = useState<MembershipPaymentState>(
+    initialState.membershipPayment
+  );
+  const [isPayingMembership, setIsPayingMembership] = useState(false);
+  const [membershipPaymentError, setMembershipPaymentError] = useState<string | null>(null);
 
   // Modal states
   const [isMedModalOpen, setIsMedModalOpen] = useState(false);
@@ -130,12 +145,17 @@ export default function App() {
 
   useEffect(() => {
     try {
-      const payload: PersistedState = { medicines, orders, checkIns };
+      const payload: PersistedState = {
+        medicines,
+        orders,
+        checkIns,
+        membershipPayment,
+      };
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
       // Ignore storage quota errors in restricted environments
     }
-  }, [medicines, orders, checkIns]);
+  }, [medicines, orders, checkIns, membershipPayment]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -234,10 +254,52 @@ export default function App() {
     showToast(`Monthly check-in logged for ${checkIn.memberName}.`);
   };
 
+  const handlePayMembership = async () => {
+    if (isPayingMembership) return;
+    setMembershipPaymentError(null);
+    setIsPayingMembership(true);
+
+    try {
+      const result = await initiateUpiFirstRazorpayPayment({
+        amountInRupees: 99,
+        purpose: 'membership',
+        description: 'DawaiDost Family Plan — ₹99/month Membership',
+        receipt: `dd_mem_${Date.now()}`,
+        prefill: {
+          name: user?.displayName || 'Sharma Household',
+          email: user?.email || '',
+        },
+        notes: {
+          plan: 'monthly_99_inr',
+          beachhead: 'Noida & Greater Noida RWAs',
+        },
+      });
+
+      setMembershipPayment({
+        verified: result.verified,
+        razorpayPaymentId: result.razorpay_payment_id,
+        razorpayOrderId: result.razorpay_order_id,
+        verifiedAt: '20 Nov 2026',
+        amount: 99,
+      });
+      showToast(`Membership verified via UPI / Razorpay (${result.razorpay_payment_id}).`);
+    } catch (error) {
+      setMembershipPaymentError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to complete UPI / Razorpay membership payment.'
+      );
+    } finally {
+      setIsPayingMembership(false);
+    }
+  };
+
   const handleResetSampleData = () => {
     setMedicines(INITIAL_MEDICINES);
     setOrders(INITIAL_REFILL_ORDERS);
     setCheckIns(INITIAL_CHECKINS);
+    setMembershipPayment(DEFAULT_MEMBERSHIP_STATE);
+    setMembershipPaymentError(null);
     setSelectedMemberId('all');
     try {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -297,6 +359,10 @@ export default function App() {
             onPreviewReminder={(med) => setReminderMedicine(med)}
             onApproveRefill={(med) => setApprovalMedicine(med)}
             onSimulateDaysAdvance={handleSimulateDaysAdvance}
+            membershipPayment={membershipPayment}
+            isPayingMembership={isPayingMembership}
+            membershipPaymentError={membershipPaymentError}
+            onPayMembership={handlePayMembership}
           />
         )}
 
@@ -361,6 +427,8 @@ export default function App() {
         primaryMedicine={approvalMedicine}
         allMedicines={medicines}
         member={getMemberById(approvalMedicine?.memberId)}
+        userEmail={user.email || undefined}
+        userName={user.displayName || undefined}
         onConfirmOrder={handleConfirmRefillOrder}
         onOpenEditRx={(med) => handleEditMedicine(med)}
       />

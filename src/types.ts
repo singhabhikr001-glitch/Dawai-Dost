@@ -62,6 +62,17 @@ export interface RefillOrder {
   pharmacistRegNo: string;
   status: 'Pharmacist Verified · Scheduled' | 'Dispatched via RWA Desk' | 'Delivered';
   deliverySlot: string;
+  paymentVerified?: boolean;
+  razorpayPaymentId?: string;
+  razorpayOrderId?: string;
+}
+
+export interface MembershipPaymentState {
+  verified: boolean;
+  razorpayPaymentId?: string;
+  razorpayOrderId?: string;
+  verifiedAt?: string;
+  amount: number;
 }
 
 export type MissedDosesOption =

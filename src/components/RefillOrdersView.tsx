@@ -99,15 +99,26 @@ export const RefillOrdersView: React.FC<RefillOrdersViewProps> = ({ orders }) =>
               </div>
 
               {/* Verification Footer */}
-              <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-600">
-                <span className="inline-flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-teal-700 shrink-0" aria-hidden="true" />
-                  <span>
-                    Verified by <strong>{order.pharmacistName}</strong> ({order.pharmacistRegNo}) ·{' '}
-                    {order.partnerPharmacy} (Lic: {order.partnerLicenseNo})
+              <div className="pt-3 border-t border-slate-100 space-y-2 text-xs text-slate-600">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-teal-700 shrink-0" aria-hidden="true" />
+                    <span>
+                      Verified by <strong>{order.pharmacistName}</strong> ({order.pharmacistRegNo}) ·{' '}
+                      {order.partnerPharmacy} (Lic: {order.partnerLicenseNo})
+                    </span>
                   </span>
-                </span>
-                <span className="text-slate-500 shrink-0">{order.deliverySlot}</span>
+                  <span className="text-slate-500 shrink-0">{order.deliverySlot}</span>
+                </div>
+                {order.paymentVerified && order.razorpayPaymentId && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-emerald-800">
+                    <span className="inline-flex items-center gap-1.5 font-semibold">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" aria-hidden="true" />
+                      <span>Payment Verified via UPI / Razorpay</span>
+                    </span>
+                    <span className="font-mono text-slate-700">{order.razorpayPaymentId}</span>
+                  </div>
+                )}
               </div>
             </article>
           ))}
