@@ -82,6 +82,9 @@ function formatFirebaseAuthError(error: unknown): string {
       return 'Pop-up was blocked by your browser. Please allow pop-ups for this site and try again.';
     case 'auth/unauthorized-domain':
       return 'This domain is not authorized in your Firebase project. Add this URL under Firebase Console → Authentication → Settings → Authorized domains.';
+    case 'auth/invalid-api-key':
+    case 'auth/api-key-not-valid':
+      return 'The Firebase API key appears invalid or restricted. Verify VITE_FIREBASE_API_KEY and API key restrictions in Google Cloud / Firebase Console.';
     case 'auth/network-request-failed':
       return 'Network error while reaching Google Sign-In. Check your connection and retry.';
     default:

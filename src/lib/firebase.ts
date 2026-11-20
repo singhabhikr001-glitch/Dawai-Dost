@@ -1,13 +1,36 @@
 import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
 import { Auth, GoogleAuthProvider, getAuth } from 'firebase/auth';
 
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyB2xGwYF69STaEE5B95F3iG2maRt4WVq2U',
+  authDomain: 'dawaildost.firebaseapp.com',
+  projectId: 'dawaildost',
+  storageBucket: 'dawaildost.firebasestorage.app',
+  messagingSenderId: '49560904796',
+  appId: '1:49560904796:web:4074ef836ae5c768caf299',
+  measurementId: 'G-BZ9VX0F61C',
+};
+
 const envConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY?.trim() || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN?.trim() || '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID?.trim() || '',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET?.trim() || '',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID?.trim() || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID?.trim() || '',
+  apiKey:
+    import.meta.env.VITE_FIREBASE_API_KEY?.trim() || DEFAULT_FIREBASE_CONFIG.apiKey,
+  authDomain:
+    import.meta.env.VITE_FIREBASE_AUTH_DOMAIN?.trim() ||
+    DEFAULT_FIREBASE_CONFIG.authDomain,
+  projectId:
+    import.meta.env.VITE_FIREBASE_PROJECT_ID?.trim() ||
+    DEFAULT_FIREBASE_CONFIG.projectId,
+  storageBucket:
+    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET?.trim() ||
+    DEFAULT_FIREBASE_CONFIG.storageBucket,
+  messagingSenderId:
+    import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID?.trim() ||
+    DEFAULT_FIREBASE_CONFIG.messagingSenderId,
+  appId:
+    import.meta.env.VITE_FIREBASE_APP_ID?.trim() || DEFAULT_FIREBASE_CONFIG.appId,
+  measurementId:
+    import.meta.env.VITE_FIREBASE_MEASUREMENT_ID?.trim() ||
+    DEFAULT_FIREBASE_CONFIG.measurementId,
 };
 
 const REQUIRED_ENV_ENTRIES: [keyof typeof envConfig, string][] = [
